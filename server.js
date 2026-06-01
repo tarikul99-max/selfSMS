@@ -8,9 +8,9 @@ app.use(cors());
 app.use(express.json());
 
 // MoceanAPI Configuration
-const API_TOKEN = process.env.MOAPI_API_TOKEN || "apit-OQIS2YCpY9TzuEiCmVrGM8AGJWAL9LSuq-9q61d";
+const API_TOKEN = "apit-OQIS2YCpY9TzuEiCmVrGM8AGJWAL9LSuq-9q61d";
 
-// ✅ মূল রুট পাথ এ রেসপন্স দিন (এই অংশটি যোগ করুন)
+// Root endpoint
 app.get('/', (req, res) => {
     res.json({
         status: "active",
@@ -23,7 +23,7 @@ app.get('/', (req, res) => {
     });
 });
 
-// SMS পাঠানোর API
+// SMS sending API
 app.post('/api/send-sms', async (req, res) => {
     console.log("📨 Request received:", req.body);
     
@@ -39,7 +39,7 @@ app.post('/api/send-sms', async (req, res) => {
         formattedPhone = '880' + phone.replace(/^0+/, '');
     }
     
-    // Create message
+    // Create message in Bengali
     const message = `${studentName || 'শিক্ষার্থী'} ${className || ''} শ্রেণির শিক্ষার্থী ${date || 'আজ'} তারিখে বিদ্যালয়ে অনুপস্থিত ছিল। - মাস্টারমাইন্ড`;
     
     try {
@@ -57,7 +57,7 @@ app.post('/api/send-sms', async (req, res) => {
         console.log("Mocean Response:", response.data);
         
         if (response.data.status === "0") {
-            res.json({ success: true, message: "SMS sent successfully" });
+            res.json({ success: true, message: "SMS sent successfully", data: response.data });
         } else {
             res.json({ success: false, error: response.data.err_msg || "Failed to send SMS" });
         }
@@ -68,7 +68,7 @@ app.post('/api/send-sms', async (req, res) => {
     }
 });
 
-// হেলথ চেক
+// Health check
 app.get('/api/health', (req, res) => {
     res.json({ 
         status: "active", 
@@ -77,7 +77,7 @@ app.get('/api/health', (req, res) => {
     });
 });
 
-// ✅ 404 হ্যান্ডলার (অজানা পাথে)
+// 404 handler
 app.use((req, res) => {
     res.status(404).json({
         success: false,
