@@ -1,56 +1,39 @@
-// ==================== SMS FUNCTIONS - UPDATED FOR ALL PHONE FORMATS ====================
+// ==================== SMS FUNCTIONS - +8801XXXXXXXXX FORMAT SUPPORT ====================
 
-// আপনার selfSMS সার্ভিস URL (Render এ ডিপ্লয় করা)
+// আপনার selfSMS সার্ভিস URL
 const SELF_SMS_URL = "https://selfsms.onrender.com";
 
-// ফোন নম্বর ফরম্যাট করার ফাংশন - সব ফরম্যাট সাপোর্ট করে
+// ফোন নম্বর ফরম্যাট করার ফাংশন - +8801XXXXXXXXX ফরম্যাট সাপোর্ট করে
 function formatPhoneNumber(phoneNumber) {
     if (!phoneNumber) return null;
     
     // সব ক্যারেক্টার বাদে শুধু নাম্বার রাখি
     let cleanNumber = phoneNumber.toString().replace(/[^0-9]/g, '');
     
-    console.log("Original phone:", phoneNumber);
-    console.log("Clean number:", cleanNumber);
+    console.log("📞 Original phone:", phoneNumber);
+    console.log("📞 Clean number:", cleanNumber);
     
-    // চেক করা শুরু করি
+    // +8801XXXXXXXXX ফরম্যাট চেক করা
     if (cleanNumber.startsWith('8801') && cleanNumber.length === 13) {
-        // Already in +8801XXXXXXXXX format (without +)
-        return cleanNumber;
+        return cleanNumber; // 8801889343480
     }
     else if (cleanNumber.startsWith('01') && cleanNumber.length === 11) {
-        // 01XXXXXXXXX format - add 880
-        return '880' + cleanNumber.substring(1);
+        return '880' + cleanNumber.substring(1); // 01889343480 → 8801889343480
     }
     else if (cleanNumber.startsWith('1') && cleanNumber.length === 10) {
-        // 1XXXXXXXXX format - add 880
-        return '880' + cleanNumber;
-    }
-    else if (cleanNumber.startsWith('880') && cleanNumber.length === 12) {
-        // 8801XXXXXXXXX (missing one digit)
-        return '880' + cleanNumber.substring(3);
+        return '880' + cleanNumber; // 1889343480 → 8801889343480
     }
     else if (cleanNumber.length === 10) {
-        // XXXXXXXXXX (10 digits) - assume it's missing 01
-        return '8801' + cleanNumber;
+        return '8801' + cleanNumber; // 889343480 → 8801889343480
     }
-    else if (cleanNumber.length === 11 && !cleanNumber.startsWith('01')) {
-        // 11 digits but not starting with 01
-        return '880' + cleanNumber;
+    else if (cleanNumber.length === 13 && cleanNumber.startsWith('8801')) {
+        return cleanNumber;
     }
     else {
-        // Try to fix any 13 digit number that starts with 8801
-        if (cleanNumber.length === 13 && cleanNumber.startsWith('8801')) {
-            return cleanNumber;
-        }
-        // Default: assume it's a valid number starting with 01
-        if (cleanNumber.length >= 10) {
-            let last10 = cleanNumber.slice(-10);
-            return '8801' + last10;
-        }
+        // ডিফল্ট: শেষ 10 ডিজিট নিয়ে ফরম্যাট করুন
+        let last10 = cleanNumber.slice(-10);
+        return '8801' + last10;
     }
-    
-    return cleanNumber;
 }
 
 // SMS সার্ভিস হেলথ চেক
@@ -58,38 +41,40 @@ async function checkSMSService() {
     try {
         const response = await fetch(`${SELF_SMS_URL}/health`);
         const result = await response.json();
-        console.log("SMS Service Status:", result);
+        console.log("✅ SMS Service Status:", result);
         return result.status === 'active';
     } catch (error) {
-        console.error("SMS Service not reachable:", error);
+        console.error("❌ SMS Service not reachable:", error);
         return false;
     }
 }
 
-// GET মেথড ব্যবহার করে SMS সেন্ড (সহজ)
+// GET মেথড ব্যবহার করে SMS সেন্ড (সবচেয়ে সহজ)
 async function sendSMS_GET(phoneNumber, message) {
     if (!phoneNumber) {
         return { success: false, error: "Phone number is required" };
     }
     
     const formattedPhone = formatPhoneNumber(phoneNumber);
-    if (!formattedPhone || formattedPhone.length < 12) {
-        return { success: false, error: `Invalid phone number format: ${phoneNumber}` };
+    if (!formattedPhone || formattedPhone.length !== 13) {
+        return { 
+            success: false, 
+            error: `Invalid phone number format: ${phoneNumber}\nসঠিক ফরম্যাট: +8801XXXXXXXXX (যেমন: +8801889343480)`
+        };
     }
     
     const encodedMessage = encodeURIComponent(message);
     const url = `${SELF_SMS_URL}/send-sms?phone=${formattedPhone}&message=${encodedMessage}`;
     
-    console.log("Sending SMS via GET to:", formattedPhone);
-    console.log("URL:", url);
+    console.log("📤 Sending SMS via GET to:", formattedPhone);
     
     try {
         const response = await fetch(url);
         const result = await response.json();
-        console.log("SMS GET Response:", result);
+        console.log("📨 SMS Response:", result);
         return result;
     } catch (error) {
-        console.error("SMS GET Error:", error);
+        console.error("❌ SMS GET Error:", error);
         return { success: false, error: error.message };
     }
 }
@@ -101,8 +86,11 @@ async function sendSMS_POST(phoneNumber, studentName, className, date, teacherNa
     }
     
     const formattedPhone = formatPhoneNumber(phoneNumber);
-    if (!formattedPhone || formattedPhone.length < 12) {
-        return { success: false, error: `Invalid phone number format: ${phoneNumber}` };
+    if (!formattedPhone || formattedPhone.length !== 13) {
+        return { 
+            success: false, 
+            error: `Invalid phone number format: ${phoneNumber}\nসঠিক ফরম্যাট: +8801XXXXXXXXX (যেমন: +8801889343480)`
+        };
     }
     
     // বাংলা মেসেজ তৈরি
@@ -114,8 +102,8 @@ async function sendSMS_POST(phoneNumber, studentName, className, date, teacherNa
     
     const message = `📢 মাস্টারমাইন্ড অ্যাকাডেমি\nপ্রিয় অভিভাবক,\n${studentName} ${banglaDate} তারিখে ${className} ক্লাসে উপস্থিত ছিলেন না।\nদয়া করে সন্তানের উপস্থিতি নিশ্চিত করুন।\nধন্যবাদ - ${teacherName || "মাস্টারমাইন্ড"}`;
     
-    console.log("Sending SMS via POST to:", formattedPhone);
-    console.log("Message:", message);
+    console.log("📤 Sending SMS via POST to:", formattedPhone);
+    console.log("📝 Message:", message.substring(0, 100) + "...");
     
     try {
         const response = await fetch(`${SELF_SMS_URL}/send-sms`, {
@@ -133,25 +121,28 @@ async function sendSMS_POST(phoneNumber, studentName, className, date, teacherNa
         });
         
         const result = await response.json();
-        console.log("SMS POST Response:", result);
+        console.log("📨 SMS POST Response:", result);
         return result;
     } catch (error) {
-        console.error("SMS POST Error:", error);
+        console.error("❌ SMS POST Error:", error);
         return { success: false, error: error.message };
     }
 }
 
-// মেইন SMS ফাংশন - সব ফরম্যাট সাপোর্ট করে
+// মেইন SMS ফাংশন
 async function sendAbsentSMS(phoneNumber, studentName, className, date, teacherName) {
     console.log(`📤 Sending SMS to: ${phoneNumber} for student: ${studentName}`);
     
     // ফোন নম্বর ফরম্যাট চেক
     const formattedPhone = formatPhoneNumber(phoneNumber);
-    console.log(`Formatted phone: ${formattedPhone}`);
+    console.log(`📞 Formatted phone: ${formattedPhone}`);
     
-    if (!formattedPhone || formattedPhone.length < 12) {
-        console.error(`Invalid phone number: ${phoneNumber}`);
-        return { success: false, error: `Invalid phone number: ${phoneNumber}` };
+    if (!formattedPhone || formattedPhone.length !== 13) {
+        console.error(`❌ Invalid phone number: ${phoneNumber}`);
+        return { 
+            success: false, 
+            error: `ফোন নম্বর সঠিক নয়। সঠিক ফরম্যাট: +8801XXXXXXXXX (যেমন: +8801889343480)`
+        };
     }
     
     // প্রথমে POST মেথড চেষ্টা
@@ -168,33 +159,44 @@ async function sendAbsentSMS(phoneNumber, studentName, className, date, teacherN
     return result;
 }
 
-// সরাসরি ফোন নম্বর টেস্ট করার ফাংশন (ব্রাউজার কনসোল থেকে চালান)
-window.testPhoneFormat = function(phone) {
+// টেস্ট ফাংশন - +8801XXXXXXXXX ফরম্যাট টেস্ট করার জন্য
+window.testPhoneFormat = function(phone = "+8801889343480") {
+    const original = phone;
     const formatted = formatPhoneNumber(phone);
-    console.log(`Original: ${phone} -> Formatted: ${formatted}`);
-    alert(`Original: ${phone}\nFormatted: ${formatted}`);
-    return formatted;
+    const isValid = formatted && formatted.length === 13 && formatted.startsWith('8801');
+    
+    console.log("📞 Phone Format Test:");
+    console.log(`   Original: ${original}`);
+    console.log(`   Formatted: ${formatted}`);
+    console.log(`   Valid: ${isValid ? '✅ Yes' : '❌ No'}`);
+    
+    alert(`Original: ${original}\nFormatted: ${formatted}\nValid: ${isValid ? '✅ Yes' : '❌ No'}\n\nসঠিক ফরম্যাট: +8801XXXXXXXXX`);
+    
+    return { original, formatted, isValid };
 };
 
-// টেস্ট SMS - যেকোনো ফরম্যাটে ফোন নম্বর দিন
+// টেস্ট SMS পাঠান
 window.testSMS = async function(phoneNumber = "+8801889343480") {
-    console.log("Testing SMS with phone:", phoneNumber);
+    console.log("🧪 Testing SMS with phone:", phoneNumber);
+    
     const formatted = formatPhoneNumber(phoneNumber);
-    console.log("Formatted phone:", formatted);
+    console.log("📞 Formatted phone:", formatted);
+    
+    if (!formatted || formatted.length !== 13) {
+        alert(`❌ ফোন নম্বর ফরম্যাট সঠিক নয়!\n\nআপনার দেওয়া নম্বর: ${phoneNumber}\nসঠিক ফরম্যাট: +8801XXXXXXXXX\nউদাহরণ: +8801889343480`);
+        return { success: false, error: "Invalid format" };
+    }
     
     const testMessage = "পরীক্ষামূলক SMS - মাস্টারমাইন্ড অ্যাকাডেমি থেকে পাঠানো হয়েছে";
     
     const result = await sendSMS_GET(phoneNumber, testMessage);
-    console.log("Test Result:", result);
-    alert(`Phone: ${phoneNumber}\nFormatted: ${formatted}\nSuccess: ${result.success}\nMessage: ${result.message || result.error}`);
-    return result;
-};
-
-// টেস্ট POST মেথড
-window.testSMSPost = async function(phoneNumber = "+8801889343480") {
-    const result = await sendSMS_POST(phoneNumber, "পরীক্ষা ছাত্র", "Class 6", "2026-06-04", "প্রশাসক");
-    console.log("POST Test Result:", result);
-    alert(JSON.stringify(result, null, 2));
+    
+    if (result.success) {
+        alert(`✅ টেস্ট SMS সফলভাবে পাঠানো হয়েছে!\n\n📱 ফোন নম্বর: ${formatted}\n📝 মেসেজ: ${testMessage}`);
+    } else {
+        alert(`❌ টেস্ট SMS ব্যর্থ হয়েছে!\n\n📱 ফোন নম্বর: ${formatted}\n⚠️ ত্রুটি: ${result.error}\n\nদয়া করে চেক করুন:\n1. ফোন নম্বর সঠিক কিনা (+8801XXXXXXXXX)\n2. selfSMS সার্ভিস চালু আছে কিনা`);
+    }
+    
     return result;
 };
 
@@ -204,7 +206,7 @@ async function saveAttendance() {
     const className = document.getElementById('attendanceClassSelect').value;
     const date = document.getElementById('attendanceDate').value;
     if(!className || !date) {
-        alert('ক্লাস এবং তারিখ নির্বাচন করুন');
+        alert('❌ ক্লাস এবং তারিখ নির্বাচন করুন');
         return;
     }
     
@@ -221,13 +223,13 @@ async function saveAttendance() {
     
     let smsSentCount = 0;
     let smsFailedList = [];
-    let smsSentDetails = [];
+    let smsSentList = [];
     
     if(absentStudents.length > 0) {
         // Show loading message
         const loadingMsg = document.createElement('div');
-        loadingMsg.style.cssText = 'position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:white; padding:20px; border-radius:10px; z-index:9999; box-shadow:0 0 10px rgba(0,0,0,0.3); text-align:center;';
-        loadingMsg.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${absentStudents.length} জন অভিভাবককে SMS পাঠানো হচ্ছে...<br><small style="color:#666;">ফোন নম্বর ফরম্যাট: +8801XXXXXXXXX</small>`;
+        loadingMsg.style.cssText = 'position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:white; padding:20px; border-radius:10px; z-index:9999; box-shadow:0 0 10px rgba(0,0,0,0.3); text-align:center; min-width:300px;';
+        loadingMsg.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${absentStudents.length} জন অভিভাবককে SMS পাঠানো হচ্ছে...<br><br><small style="color:#666;">📱 ফোন ফরম্যাট: +8801XXXXXXXXX</small>`;
         document.body.appendChild(loadingMsg);
         
         // Send SMS to each absent student's guardian
@@ -236,7 +238,7 @@ async function saveAttendance() {
             const originalPhone = student.guardian_phone;
             const formattedPhone = formatPhoneNumber(originalPhone);
             
-            loadingMsg.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${i+1}/${absentStudents.length} - ${student.name} কে SMS পাঠানো হচ্ছে...<br><small>ফোন: ${originalPhone} → ${formattedPhone}</small>`;
+            loadingMsg.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${i+1}/${absentStudents.length} - ${student.name} কে SMS পাঠানো হচ্ছে...<br><br><small>📱 ${originalPhone} → ${formattedPhone}</small>`;
             
             const result = await sendAbsentSMS(
                 student.guardian_phone, 
@@ -248,11 +250,11 @@ async function saveAttendance() {
             
             if(result.success) {
                 smsSentCount++;
-                smsSentDetails.push(`${student.name} (${formatPhoneNumber(student.guardian_phone)})`);
-                console.log(`✓ SMS sent to ${student.name} (${student.guardian_phone})`);
+                smsSentList.push(`${student.name} (${formattedPhone})`);
+                console.log(`✅ SMS sent to ${student.name} (${formattedPhone})`);
             } else {
-                smsFailedList.push(`${student.name} (${student.guardian_phone}) - ${result.error || 'Unknown error'}`);
-                console.log(`✗ SMS failed for ${student.name}: ${result.error}`);
+                smsFailedList.push(`${student.name} (${originalPhone}) - ${result.error || 'Unknown error'}`);
+                console.log(`❌ SMS failed for ${student.name}: ${result.error}`);
             }
             // Small delay to avoid rate limiting
             await new Promise(resolve => setTimeout(resolve, 500));
@@ -269,18 +271,17 @@ async function saveAttendance() {
         
         if(smsSentCount > 0) {
             resultMessage += `✅ সফলভাবে SMS পেয়েছেন: ${smsSentCount} জন\n`;
-            if(smsSentDetails.length > 0) {
-                resultMessage += `📨 প্রাপক: ${smsSentDetails.join(', ')}\n`;
-            }
+            resultMessage += `📨 প্রাপক: ${smsSentList.join(', ')}\n\n`;
         }
         
         if(smsFailedList.length > 0) {
-            resultMessage += `\n❌ ব্যর্থ: ${smsFailedList.length} জন\n`;
-            resultMessage += `কারণ: ফোন নম্বর সঠিক নাও থাকতে পারে (+8801XXXXXXXXX ফরম্যাটে দিন)`;
+            resultMessage += `❌ ব্যর্থ: ${smsFailedList.length} জন\n`;
+            resultMessage += `${smsFailedList.join('\n')}\n\n`;
+            resultMessage += `⚠️ দয়া করে ফোন নম্বর +8801XXXXXXXXX ফরম্যাটে আপডেট করুন।`;
         }
         
         if(smsSentCount === 0 && smsFailedList.length > 0) {
-            resultMessage += `\n\n⚠️ কোন SMS পাঠানো যায়নি। দয়া করে ফোন নম্বর +8801XXXXXXXXX ফরম্যাটে আপডেট করুন।`;
+            resultMessage += `\n⚠️ কোন SMS পাঠানো যায়নি। দয়া করে ফোন নম্বর +8801XXXXXXXXX ফরম্যাটে আপডেট করুন।`;
         }
         
         alert(resultMessage);
@@ -288,33 +289,30 @@ async function saveAttendance() {
         if(absentCount === 0) {
             alert(`✅ উপস্থিতি সংরক্ষিত হয়েছে!\n\n📊 উপস্থিত: ${presentCount} জন\n📋 অনুপস্থিত: ০ জন\nসবাই উপস্থিত।`);
         } else {
-            alert(`✅ উপস্থিতি সংরক্ষিত হয়েছে!\n\n📊 উপস্থিত: ${presentCount} জন\n📋 অনুপস্থিত: ${absentCount} জন\n⚠️ অনুপস্থিত ${absentCount} জনের ফোন নম্বর নেই।\n\nফোন নম্বর ফরম্যাট: +8801XXXXXXXXX`);
+            alert(`✅ উপস্থিতি সংরক্ষিত হয়েছে!\n\n📊 উপস্থিত: ${presentCount} জন\n📋 অনুপস্থিত: ${absentCount} জন\n⚠️ অনুপস্থিত ${absentCount} জনের ফোন নম্বর নেই।\n\n📱 ফোন নম্বর ফরম্যাট: +8801XXXXXXXXX`);
         }
     }
     
     await loadClassMonthlyCalendar();
 }
 
-// ফোন নম্বর আপডেট করার জন্য হেল্পার ফাংশন
-window.updateStudentPhone = async function(studentId, newPhone) {
-    if (!confirm(`ছাত্র ${studentId} এর ফোন নম্বর ${newPhone} এ আপডেট করবেন?`)) return;
-    
-    const formattedPhone = formatPhoneNumber(newPhone);
-    alert(`ফোন নম্বর ফরম্যাট করা হয়েছে: ${newPhone} → ${formattedPhone}`);
-    
-    // এখানে Firebase এ আপডেট করার কোড যোগ করতে পারেন
-    console.log(`Update student ${studentId} phone to ${formattedPhone}`);
+// SMS সার্ভিস চেক এবং ফোন ফরম্যাট হেল্পার দেখান
+window.showSMSHelp = function() {
+    alert(`📱 SMS হেল্প গাইড\n\n✅ সঠিক ফোন নম্বর ফরম্যাট:\n   +8801XXXXXXXXX\n   উদাহরণ: +8801889343480\n\n✅ ভুল ফরম্যাট:\n   01889343480 ✗\n   8801889343480 ✗\n   1889343480 ✗\n\n✅ টেস্ট SMS পাঠান:\n   testSMS("+8801889343480")\n\n✅ ফোন নম্বর ফরম্যাট চেক:\n   testPhoneFormat("+8801889343480")`);
 };
 
-// পেজ লোড হলে SMS সার্ভিস চেক করুন এবং ফোন ফরম্যাট হেল্পার দেখান
+// পেজ লোড হলে SMS সার্ভিস চেক করুন
 window.addEventListener('load', () => {
     setTimeout(async () => {
+        console.log("🔍 Checking SMS Service...");
         const isActive = await checkSMSService();
         if (isActive) {
             console.log("✅ SMS Service is active and ready");
-            console.log("📱 Phone number format: +8801XXXXXXXXX (e.g., +8801889343480)");
+            console.log("📱 Phone format: +8801XXXXXXXXX (e.g., +8801889343480)");
+            console.log("💡 টেস্ট করতে: testSMS('+8801889343480')");
         } else {
             console.log("⚠️ SMS Service is not responding. Check your selfSMS service.");
+            console.log("🔗 selfSMS URL: https://selfsms.onrender.com/health");
         }
     }, 2000);
 });
