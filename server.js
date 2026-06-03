@@ -37,11 +37,11 @@ app.get('/send-sms', async (req, res) => {
     // Format phone number
     let formattedPhone = phone.replace(/[^0-9]/g, '');
     if (formattedPhone.startsWith('01')) {
-        formattedPhone = '880' + formattedPhone.substring(1);
+        formattedPhone = '+880' + formattedPhone.substring(1);
     } else if (formattedPhone.startsWith('88')) {
-        formattedPhone = '880' + formattedPhone.substring(2);
+        formattedPhone = '+880' + formattedPhone.substring(2);
     } else if (!formattedPhone.startsWith('880')) {
-        formattedPhone = '880' + formattedPhone;
+        formattedPhone = '+880' + formattedPhone;
     }
     
     // Create message if not provided
@@ -97,11 +97,11 @@ app.post('/send-sms', async (req, res) => {
     // Format phone number
     let formattedPhone = phone.replace(/[^0-9]/g, '');
     if (formattedPhone.startsWith('01')) {
-        formattedPhone = '880' + formattedPhone.substring(1);
+        formattedPhone = '+880' + formattedPhone.substring(1);
     } else if (formattedPhone.startsWith('88')) {
-        formattedPhone = '880' + formattedPhone.substring(2);
+        formattedPhone = '+880' + formattedPhone.substring(2);
     } else if (!formattedPhone.startsWith('880')) {
-        formattedPhone = '880' + formattedPhone;
+        formattedPhone = '+880' + formattedPhone;
     }
     
     // Create message if not provided
