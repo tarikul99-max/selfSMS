@@ -1,318 +1,302 @@
-// ==================== SMS FUNCTIONS - +8801XXXXXXXXX FORMAT SUPPORT ====================
+const express = require('express');
+const cors = require('cors');
+const axios = require('axios');
 
-// আপনার selfSMS সার্ভিস URL
-const SELF_SMS_URL = "https://selfsms.onrender.com";
+const app = express();
+app.use(cors());
+app.use(express.json());
 
-// ফোন নম্বর ফরম্যাট করার ফাংশন - +8801XXXXXXXXX ফরম্যাট সাপোর্ট করে
+// TextMeBot API Configuration
+const TEXTMEBOT_API_KEY = "M1mcbWVX9K9A";
+const YOUR_PHONE = "8801889343480"; // আপনার ফোন নম্বর (যেটা কানেক্ট করেছেন)
+
+// Helper function to format phone number
 function formatPhoneNumber(phoneNumber) {
     if (!phoneNumber) return null;
-    
-    // সব ক্যারেক্টার বাদে শুধু নাম্বার রাখি
     let cleanNumber = phoneNumber.toString().replace(/[^0-9]/g, '');
     
-    console.log("📞 Original phone:", phoneNumber);
-    console.log("📞 Clean number:", cleanNumber);
-    
-    // +8801XXXXXXXXX ফরম্যাট চেক করা
     if (cleanNumber.startsWith('8801') && cleanNumber.length === 13) {
-        return cleanNumber; // 8801889343480
-    }
-    else if (cleanNumber.startsWith('01') && cleanNumber.length === 11) {
-        return '880' + cleanNumber.substring(1); // 01889343480 → 8801889343480
-    }
-    else if (cleanNumber.startsWith('1') && cleanNumber.length === 10) {
-        return '880' + cleanNumber; // 1889343480 → 8801889343480
-    }
-    else if (cleanNumber.length === 10) {
-        return '8801' + cleanNumber; // 889343480 → 8801889343480
-    }
-    else if (cleanNumber.length === 13 && cleanNumber.startsWith('8801')) {
         return cleanNumber;
-    }
-    else {
-        // ডিফল্ট: শেষ 10 ডিজিট নিয়ে ফরম্যাট করুন
+    } else if (cleanNumber.startsWith('01') && cleanNumber.length === 11) {
+        return '880' + cleanNumber.substring(1);
+    } else if (cleanNumber.startsWith('1') && cleanNumber.length === 10) {
+        return '880' + cleanNumber;
+    } else if (cleanNumber.length === 10) {
+        return '8801' + cleanNumber;
+    } else {
         let last10 = cleanNumber.slice(-10);
         return '8801' + last10;
     }
 }
 
-// SMS সার্ভিস হেলথ চেক
-async function checkSMSService() {
-    try {
-        const response = await fetch(`${SELF_SMS_URL}/health`);
-        const result = await response.json();
-        console.log("✅ SMS Service Status:", result);
-        return result.status === 'active';
-    } catch (error) {
-        console.error("❌ SMS Service not reachable:", error);
-        return false;
+// Remove country code for WhatsApp (TextMeBot expects number without 880)
+function formatForWhatsApp(phoneNumber) {
+    let formatted = formatPhoneNumber(phoneNumber);
+    if (formatted && formatted.startsWith('880')) {
+        return formatted.substring(3); // Remove 880
     }
+    return formatted;
 }
 
-// GET মেথড ব্যবহার করে SMS সেন্ড (সবচেয়ে সহজ)
-async function sendSMS_GET(phoneNumber, message) {
-    if (!phoneNumber) {
-        return { success: false, error: "Phone number is required" };
-    }
-    
-    const formattedPhone = formatPhoneNumber(phoneNumber);
-    if (!formattedPhone || formattedPhone.length !== 13) {
-        return { 
-            success: false, 
-            error: `Invalid phone number format: ${phoneNumber}\nসঠিক ফরম্যাট: +8801XXXXXXXXX (যেমন: +8801889343480)`
-        };
-    }
-    
-    const encodedMessage = encodeURIComponent(message);
-    const url = `${SELF_SMS_URL}/send-sms?phone=${formattedPhone}&message=${encodedMessage}`;
-    
-    console.log("📤 Sending SMS via GET to:", formattedPhone);
-    
-    try {
-        const response = await fetch(url);
-        const result = await response.json();
-        console.log("📨 SMS Response:", result);
-        return result;
-    } catch (error) {
-        console.error("❌ SMS GET Error:", error);
-        return { success: false, error: error.message };
-    }
-}
-
-// POST মেথড ব্যবহার করে SMS সেন্ড
-async function sendSMS_POST(phoneNumber, studentName, className, date, teacherName) {
-    if (!phoneNumber) {
-        return { success: false, error: "Phone number is required" };
-    }
-    
-    const formattedPhone = formatPhoneNumber(phoneNumber);
-    if (!formattedPhone || formattedPhone.length !== 13) {
-        return { 
-            success: false, 
-            error: `Invalid phone number format: ${phoneNumber}\nসঠিক ফরম্যাট: +8801XXXXXXXXX (যেমন: +8801889343480)`
-        };
-    }
-    
-    // বাংলা মেসেজ তৈরি
-    const banglaDate = new Date(date).toLocaleDateString('bn-BD', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
+// Health check
+app.get('/health', (req, res) => {
+    res.json({ 
+        status: "active", 
+        service: "WhatsApp SMS API",
+        api_type: "TextMeBot",
+        timestamp: new Date().toISOString()
     });
+});
+
+// Root endpoint
+app.get('/', (req, res) => {
+    res.json({
+        status: "active",
+        service: "Mastermind Academy SMS Service",
+        api: "TextMeBot WhatsApp API",
+        endpoints: {
+            health: "GET /health",
+            send_sms: "POST /send-sms",
+            send_whatsapp: "POST /send-whatsapp",
+            test: "GET /test-sms"
+        },
+        phone_format: "+8801XXXXXXXXX"
+    });
+});
+
+// Send WhatsApp message using TextMeBot API
+async function sendWhatsAppMessage(phoneNumber, message) {
+    const whatsappNumber = formatForWhatsApp(phoneNumber);
     
-    const message = `📢 মাস্টারমাইন্ড অ্যাকাডেমি\nপ্রিয় অভিভাবক,\n${studentName} ${banglaDate} তারিখে ${className} ক্লাসে উপস্থিত ছিলেন না।\nদয়া করে সন্তানের উপস্থিতি নিশ্চিত করুন।\nধন্যবাদ - ${teacherName || "মাস্টারমাইন্ড"}`;
-    
-    console.log("📤 Sending SMS via POST to:", formattedPhone);
-    console.log("📝 Message:", message.substring(0, 100) + "...");
+    console.log(`📤 Sending WhatsApp to: ${whatsappNumber}`);
+    console.log(`📝 Message: ${message.substring(0, 100)}...`);
     
     try {
-        const response = await fetch(`${SELF_SMS_URL}/send-sms`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                phone: formattedPhone,
-                message: message,
-                studentName: studentName,
-                className: className,
-                date: date
-            })
+        // TextMeBot API endpoint
+        const url = `https://api.textmebot.com/send.php`;
+        const response = await axios.get(url, {
+            params: {
+                recipient: whatsappNumber,
+                text: message,
+                apikey: TEXTMEBOT_API_KEY
+            }
         });
         
-        const result = await response.json();
-        console.log("📨 SMS POST Response:", result);
-        return result;
+        console.log("TextMeBot Response:", response.data);
+        return response.data;
+        
     } catch (error) {
-        console.error("❌ SMS POST Error:", error);
-        return { success: false, error: error.message };
+        console.error("TextMeBot Error:", error.message);
+        throw error;
     }
 }
 
-// মেইন SMS ফাংশন
-async function sendAbsentSMS(phoneNumber, studentName, className, date, teacherName) {
-    console.log(`📤 Sending SMS to: ${phoneNumber} for student: ${studentName}`);
+// POST endpoint for sending SMS/WhatsApp
+app.post('/send-sms', async (req, res) => {
+    console.log("📨 Request received:", req.body);
     
-    // ফোন নম্বর ফরম্যাট চেক
-    const formattedPhone = formatPhoneNumber(phoneNumber);
+    const { phone, message, studentName, className, date } = req.body;
+    
+    if (!phone) {
+        return res.status(400).json({ 
+            success: false, 
+            error: "Phone number is required" 
+        });
+    }
+    
+    const formattedPhone = formatPhoneNumber(phone);
     console.log(`📞 Formatted phone: ${formattedPhone}`);
     
-    if (!formattedPhone || formattedPhone.length !== 13) {
-        console.error(`❌ Invalid phone number: ${phoneNumber}`);
-        return { 
+    // Create Bengali message
+    let smsMessage = message;
+    if (!smsMessage) {
+        const banglaDate = date ? new Date(date).toLocaleDateString('bn-BD', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        }) : 'আজ';
+        
+        smsMessage = `📢 *মাস্টারমাইন্ড অ্যাকাডেমি*\n\nপ্রিয় অভিভাবক,\n*${studentName || 'শিক্ষার্থী'}* ${banglaDate} তারিখে *${className || ''}* ক্লাসে উপস্থিত ছিলেন না।\n\nদয়া করে সন্তানের উপস্থিতি নিশ্চিত করুন।\n\nধন্যবাদ\nমাস্টারমাইন্ড অ্যাকাডেমি`;
+    }
+    
+    try {
+        const result = await sendWhatsAppMessage(formattedPhone, smsMessage);
+        
+        if (result && (result.includes('OK') || result.includes('success') || result === 'OK')) {
+            res.json({ 
+                success: true, 
+                message: "WhatsApp message sent successfully",
+                to: formattedPhone,
+                response: result
+            });
+        } else {
+            res.json({ 
+                success: false, 
+                error: result || "Failed to send message",
+                to: formattedPhone
+            });
+        }
+        
+    } catch (error) {
+        console.error("Error:", error.message);
+        res.status(500).json({ 
             success: false, 
-            error: `ফোন নম্বর সঠিক নয়। সঠিক ফরম্যাট: +8801XXXXXXXXX (যেমন: +8801889343480)`
-        };
+            error: error.message 
+        });
     }
-    
-    // প্রথমে POST মেথড চেষ্টা
-    let result = await sendSMS_POST(phoneNumber, studentName, className, date, teacherName);
-    
-    // POST fail হলে GET মেথড চেষ্টা
-    if (!result.success) {
-        console.log("POST failed, trying GET method...");
-        const banglaDate = new Date(date).toLocaleDateString('bn-BD');
-        const message = `মাস্টারমাইন্ড: ${studentName} ${banglaDate} ${className} এ অনুপস্থিত`;
-        result = await sendSMS_GET(phoneNumber, message);
-    }
-    
-    return result;
-}
+});
 
-// টেস্ট ফাংশন - +8801XXXXXXXXX ফরম্যাট টেস্ট করার জন্য
-window.testPhoneFormat = function(phone = "+8801889343480") {
-    const original = phone;
-    const formatted = formatPhoneNumber(phone);
-    const isValid = formatted && formatted.length === 13 && formatted.startsWith('8801');
+// GET endpoint for testing (easy to test from browser)
+app.get('/send-sms', async (req, res) => {
+    const { phone, message, studentName, className, date } = req.query;
     
-    console.log("📞 Phone Format Test:");
-    console.log(`   Original: ${original}`);
-    console.log(`   Formatted: ${formatted}`);
-    console.log(`   Valid: ${isValid ? '✅ Yes' : '❌ No'}`);
-    
-    alert(`Original: ${original}\nFormatted: ${formatted}\nValid: ${isValid ? '✅ Yes' : '❌ No'}\n\nসঠিক ফরম্যাট: +8801XXXXXXXXX`);
-    
-    return { original, formatted, isValid };
-};
-
-// টেস্ট SMS পাঠান
-window.testSMS = async function(phoneNumber = "+8801889343480") {
-    console.log("🧪 Testing SMS with phone:", phoneNumber);
-    
-    const formatted = formatPhoneNumber(phoneNumber);
-    console.log("📞 Formatted phone:", formatted);
-    
-    if (!formatted || formatted.length !== 13) {
-        alert(`❌ ফোন নম্বর ফরম্যাট সঠিক নয়!\n\nআপনার দেওয়া নম্বর: ${phoneNumber}\nসঠিক ফরম্যাট: +8801XXXXXXXXX\nউদাহরণ: +8801889343480`);
-        return { success: false, error: "Invalid format" };
+    if (!phone) {
+        return res.status(400).json({ 
+            success: false, 
+            error: "Phone number is required",
+            example: "/send-sms?phone=8801889343480&message=Hello"
+        });
     }
     
-    const testMessage = "পরীক্ষামূলক SMS - মাস্টারমাইন্ড অ্যাকাডেমি থেকে পাঠানো হয়েছে";
+    const formattedPhone = formatPhoneNumber(phone);
     
-    const result = await sendSMS_GET(phoneNumber, testMessage);
-    
-    if (result.success) {
-        alert(`✅ টেস্ট SMS সফলভাবে পাঠানো হয়েছে!\n\n📱 ফোন নম্বর: ${formatted}\n📝 মেসেজ: ${testMessage}`);
-    } else {
-        alert(`❌ টেস্ট SMS ব্যর্থ হয়েছে!\n\n📱 ফোন নম্বর: ${formatted}\n⚠️ ত্রুটি: ${result.error}\n\nদয়া করে চেক করুন:\n1. ফোন নম্বর সঠিক কিনা (+8801XXXXXXXXX)\n2. selfSMS সার্ভিস চালু আছে কিনা`);
+    let smsMessage = message;
+    if (!smsMessage) {
+        const banglaDate = date ? new Date(date).toLocaleDateString('bn-BD') : 'আজ';
+        smsMessage = `📢 মাস্টারমাইন্ড অ্যাকাডেমি\n\nপ্রিয় অভিভাবক,\n${studentName || 'শিক্ষার্থী'} ${banglaDate} তারিখে ${className || ''} ক্লাসে উপস্থিত ছিলেন না।\n\nদয়া করে সন্তানের উপস্থিতি নিশ্চিত করুন।\n\nধন্যবাদ - মাস্টারমাইন্ড`;
     }
     
-    return result;
-};
-
-// ==================== UPDATED SAVE ATTENDANCE FUNCTION ====================
-
-async function saveAttendance() {
-    const className = document.getElementById('attendanceClassSelect').value;
-    const date = document.getElementById('attendanceDate').value;
-    if(!className || !date) {
-        alert('❌ ক্লাস এবং তারিখ নির্বাচন করুন');
-        return;
-    }
-    
-    const classKey = className.replace(/\s+/g,'_').replace(/\(/g,'').replace(/\)/g,'');
-    let attendanceData = {};
-    currentStudentsList.forEach(s => { attendanceData[s.id] = s.present === true; });
-    
-    await db.ref(`attendances/${classKey}/${date}`).set(attendanceData);
-    
-    // Get absent students with valid guardian phone numbers
-    const absentStudents = currentStudentsList.filter(s => s.present !== true && s.guardian_phone && s.guardian_phone.length >= 10);
-    const presentCount = currentStudentsList.filter(s => s.present === true).length;
-    const absentCount = currentStudentsList.length - presentCount;
-    
-    let smsSentCount = 0;
-    let smsFailedList = [];
-    let smsSentList = [];
-    
-    if(absentStudents.length > 0) {
-        // Show loading message
-        const loadingMsg = document.createElement('div');
-        loadingMsg.style.cssText = 'position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:white; padding:20px; border-radius:10px; z-index:9999; box-shadow:0 0 10px rgba(0,0,0,0.3); text-align:center; min-width:300px;';
-        loadingMsg.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${absentStudents.length} জন অভিভাবককে SMS পাঠানো হচ্ছে...<br><br><small style="color:#666;">📱 ফোন ফরম্যাট: +8801XXXXXXXXX</small>`;
-        document.body.appendChild(loadingMsg);
+    try {
+        const result = await sendWhatsAppMessage(formattedPhone, smsMessage);
         
-        // Send SMS to each absent student's guardian
-        for(let i = 0; i < absentStudents.length; i++) {
-            const student = absentStudents[i];
-            const originalPhone = student.guardian_phone;
-            const formattedPhone = formatPhoneNumber(originalPhone);
-            
-            loadingMsg.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${i+1}/${absentStudents.length} - ${student.name} কে SMS পাঠানো হচ্ছে...<br><br><small>📱 ${originalPhone} → ${formattedPhone}</small>`;
-            
-            const result = await sendAbsentSMS(
-                student.guardian_phone, 
-                student.name, 
-                className, 
-                date,
-                currentUser.name || (currentUser.role === 'admin' ? 'প্রশাসক' : 'শিক্ষক')
-            );
-            
-            if(result.success) {
-                smsSentCount++;
-                smsSentList.push(`${student.name} (${formattedPhone})`);
-                console.log(`✅ SMS sent to ${student.name} (${formattedPhone})`);
-            } else {
-                smsFailedList.push(`${student.name} (${originalPhone}) - ${result.error || 'Unknown error'}`);
-                console.log(`❌ SMS failed for ${student.name}: ${result.error}`);
-            }
-            // Small delay to avoid rate limiting
-            await new Promise(resolve => setTimeout(resolve, 500));
-        }
-        
-        // Remove loading message
-        loadingMsg.remove();
-        
-        // Show final result
-        let resultMessage = `✅ উপস্থিতি সংরক্ষিত হয়েছে!\n\n`;
-        resultMessage += `📊 উপস্থিত: ${presentCount} জন\n`;
-        resultMessage += `📋 অনুপস্থিত: ${absentCount} জন\n`;
-        resultMessage += `📱 ফোন ফরম্যাট: +8801XXXXXXXXX\n\n`;
-        
-        if(smsSentCount > 0) {
-            resultMessage += `✅ সফলভাবে SMS পেয়েছেন: ${smsSentCount} জন\n`;
-            resultMessage += `📨 প্রাপক: ${smsSentList.join(', ')}\n\n`;
-        }
-        
-        if(smsFailedList.length > 0) {
-            resultMessage += `❌ ব্যর্থ: ${smsFailedList.length} জন\n`;
-            resultMessage += `${smsFailedList.join('\n')}\n\n`;
-            resultMessage += `⚠️ দয়া করে ফোন নম্বর +8801XXXXXXXXX ফরম্যাটে আপডেট করুন।`;
-        }
-        
-        if(smsSentCount === 0 && smsFailedList.length > 0) {
-            resultMessage += `\n⚠️ কোন SMS পাঠানো যায়নি। দয়া করে ফোন নম্বর +8801XXXXXXXXX ফরম্যাটে আপডেট করুন।`;
-        }
-        
-        alert(resultMessage);
-    } else {
-        if(absentCount === 0) {
-            alert(`✅ উপস্থিতি সংরক্ষিত হয়েছে!\n\n📊 উপস্থিত: ${presentCount} জন\n📋 অনুপস্থিত: ০ জন\nসবাই উপস্থিত।`);
+        if (result && result.includes('OK')) {
+            res.json({ 
+                success: true, 
+                message: "WhatsApp message sent",
+                to: formattedPhone
+            });
         } else {
-            alert(`✅ উপস্থিতি সংরক্ষিত হয়েছে!\n\n📊 উপস্থিত: ${presentCount} জন\n📋 অনুপস্থিত: ${absentCount} জন\n⚠️ অনুপস্থিত ${absentCount} জনের ফোন নম্বর নেই।\n\n📱 ফোন নম্বর ফরম্যাট: +8801XXXXXXXXX`);
+            res.json({ 
+                success: false, 
+                error: result,
+                to: formattedPhone
+            });
         }
+        
+    } catch (error) {
+        res.status(500).json({ 
+            success: false, 
+            error: error.message 
+        });
+    }
+});
+
+// Simple test endpoint
+app.get('/test-sms', async (req, res) => {
+    const testPhone = "8801889343480";
+    const testMessage = "🧪 *পরীক্ষামূলক মেসেজ*\n\nআপনার WhatsApp সংযোগ সঠিকভাবে কাজ করছে!\n\n- মাস্টারমাইন্ড অ্যাকাডেমি";
+    
+    console.log("🧪 Sending test message...");
+    
+    try {
+        const result = await sendWhatsAppMessage(testPhone, testMessage);
+        
+        res.json({ 
+            success: true, 
+            message: "Test message sent to your WhatsApp",
+            to: testPhone,
+            response: result
+        });
+    } catch (error) {
+        res.json({ 
+            success: false, 
+            error: error.message 
+        });
+    }
+});
+
+// Send to multiple recipients (bulk)
+app.post('/bulk-sms', async (req, res) => {
+    const { recipients } = req.body; // [{ phone, studentName, className, date }]
+    
+    if (!recipients || !Array.isArray(recipients) || recipients.length === 0) {
+        return res.status(400).json({ 
+            success: false, 
+            error: "Recipients array is required" 
+        });
     }
     
-    await loadClassMonthlyCalendar();
-}
-
-// SMS সার্ভিস চেক এবং ফোন ফরম্যাট হেল্পার দেখান
-window.showSMSHelp = function() {
-    alert(`📱 SMS হেল্প গাইড\n\n✅ সঠিক ফোন নম্বর ফরম্যাট:\n   +8801XXXXXXXXX\n   উদাহরণ: +8801889343480\n\n✅ ভুল ফরম্যাট:\n   01889343480 ✗\n   8801889343480 ✗\n   1889343480 ✗\n\n✅ টেস্ট SMS পাঠান:\n   testSMS("+8801889343480")\n\n✅ ফোন নম্বর ফরম্যাট চেক:\n   testPhoneFormat("+8801889343480")`);
-};
-
-// পেজ লোড হলে SMS সার্ভিস চেক করুন
-window.addEventListener('load', () => {
-    setTimeout(async () => {
-        console.log("🔍 Checking SMS Service...");
-        const isActive = await checkSMSService();
-        if (isActive) {
-            console.log("✅ SMS Service is active and ready");
-            console.log("📱 Phone format: +8801XXXXXXXXX (e.g., +8801889343480)");
-            console.log("💡 টেস্ট করতে: testSMS('+8801889343480')");
-        } else {
-            console.log("⚠️ SMS Service is not responding. Check your selfSMS service.");
-            console.log("🔗 selfSMS URL: https://selfsms.onrender.com/health");
+    console.log(`📨 Sending bulk messages to ${recipients.length} recipients`);
+    
+    const results = [];
+    for (let i = 0; i < recipients.length; i++) {
+        const recipient = recipients[i];
+        const { phone, studentName, className, date } = recipient;
+        
+        const formattedPhone = formatPhoneNumber(phone);
+        const banglaDate = date ? new Date(date).toLocaleDateString('bn-BD') : 'আজ';
+        const message = `📢 মাস্টারমাইন্ড অ্যাকাডেমি\n\nপ্রিয় অভিভাবক,\n${studentName || 'শিক্ষার্থী'} ${banglaDate} তারিখে ${className || ''} ক্লাসে উপস্থিত ছিলেন না।\n\nদয়া করে সন্তানের উপস্থিতি নিশ্চিত করুন।\n\nধন্যবাদ - মাস্টারমাইন্ড`;
+        
+        try {
+            const result = await sendWhatsAppMessage(formattedPhone, message);
+            results.push({
+                phone: formattedPhone,
+                studentName,
+                success: result && result.includes('OK'),
+                response: result
+            });
+        } catch (error) {
+            results.push({
+                phone: formattedPhone,
+                studentName,
+                success: false,
+                error: error.message
+            });
         }
-    }, 2000);
+        
+        // Delay between messages (5 seconds as recommended)
+        await new Promise(resolve => setTimeout(resolve, 5000));
+    }
+    
+    const successCount = results.filter(r => r.success).length;
+    const failCount = results.length - successCount;
+    
+    res.json({
+        success: successCount > 0,
+        total: recipients.length,
+        sent: successCount,
+        failed: failCount,
+        details: results
+    });
+});
+
+// 404 handler
+app.use((req, res) => {
+    res.status(404).json({
+        success: false,
+        error: "Endpoint not found",
+        available_endpoints: ["/", "/health", "/send-sms", "/test-sms", "/bulk-sms"]
+    });
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`\n🚀 ========================================`);
+    console.log(`✅ WhatsApp SMS Server is running!`);
+    console.log(`🚀 ========================================`);
+    console.log(`📡 Port: ${PORT}`);
+    console.log(`🔑 API Key: ${TEXTMEBOT_API_KEY}`);
+    console.log(`📱 Your Phone: ${YOUR_PHONE}`);
+    console.log(`📱 Phone format: +8801XXXXXXXXX`);
+    console.log(`\n📋 Available Endpoints:`);
+    console.log(`   GET  /                - API Info`);
+    console.log(`   GET  /health          - Health Check`);
+    console.log(`   GET  /test-sms        - Send test message to YOUR phone`);
+    console.log(`   GET  /send-sms        - Send message (GET method)`);
+    console.log(`   POST /send-sms        - Send message (POST method)`);
+    console.log(`   POST /bulk-sms        - Send bulk messages`);
+    console.log(`\n💡 Test Commands:`);
+    console.log(`   curl ${process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`}/test-sms`);
+    console.log(`   curl "${process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`}/send-sms?phone=8801889343480&message=Hello"`);
+    console.log(`========================================\n`);
 });
