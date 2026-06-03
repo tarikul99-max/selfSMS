@@ -1,184 +1,302 @@
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
+const qs = require('qs');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// TextMeBot API Configuration
-const TEXTMEBOT_API_KEY = "M1mcbWVX9K9A";
-const YOUR_PHONE = "8801889343480";
+// SMSMobileAPI Configuration
+const SMS_API_KEY = "ab6d6a99958d716ce82bed158e8ff344aca4039db52a63e9";
+const SMS_API_URL = "https://api.smsmobileapi.com/send";
 
-// Simple phone formatter
-function formatPhone(phone) {
-    let clean = phone.toString().replace(/[^0-9]/g, '');
-    if (clean.startsWith('8801') && clean.length === 13) return clean;
-    if (clean.startsWith('01') && clean.length === 11) return '880' + clean.substring(1);
-    if (clean.length === 10) return '8801' + clean;
-    if (clean.length === 9) return '8801' + clean;
-    return clean;
+// Helper function to format phone number for Bangladesh
+function formatPhoneNumber(phoneNumber) {
+    if (!phoneNumber) return null;
+    let cleanNumber = phoneNumber.toString().replace(/[^0-9]/g, '');
+    
+    console.log(`📞 Original: ${phoneNumber} → Clean: ${cleanNumber}`);
+    
+    // Format for SMSMobileAPI (needs 8801XXXXXXXXX format)
+    if (cleanNumber.length === 13 && cleanNumber.startsWith('8801')) {
+        return cleanNumber;
+    } else if (cleanNumber.length === 11 && cleanNumber.startsWith('01')) {
+        return '880' + cleanNumber.substring(1);
+    } else if (cleanNumber.length === 10 && cleanNumber.startsWith('1')) {
+        return '880' + cleanNumber;
+    } else if (cleanNumber.length === 10) {
+        return '8801' + cleanNumber;
+    } else if (cleanNumber.length === 9) {
+        return '8801' + cleanNumber;
+    } else {
+        let last10 = cleanNumber.slice(-10);
+        return '8801' + last10;
+    }
 }
 
-// Root
+// Root endpoint
 app.get('/', (req, res) => {
     res.json({
         status: "active",
-        service: "Mastermind SMS",
-        your_number: "+8801889343480",
-        api_key: TEXTMEBOT_API_KEY,
-        test: "GET /test"
+        service: "Mastermind Academy SMS Service",
+        api: "SMSMobileAPI",
+        api_key_configured: true,
+        phone_format: "+8801XXXXXXXXX (example: +8801889343480)",
+        endpoints: {
+            health: "GET /health",
+            send_sms: "POST /send-sms",
+            send_sms_get: "GET /send-sms?phone=8801889343480&message=Hello",
+            test: "GET /test-sms"
+        }
     });
 });
 
-// Health
+// Health check
 app.get('/health', (req, res) => {
-    res.json({ status: "ok", timestamp: new Date().toISOString() });
+    res.json({
+        status: "active",
+        service: "SMSMobileAPI",
+        timestamp: new Date().toISOString(),
+        api_key_configured: !!SMS_API_KEY
+    });
 });
 
-// Simple test - sends to YOUR number
-app.get('/test', async (req, res) => {
-    const message = "টেস্ট মেসেজ - মাস্টারমাইন্ড অ্যাকাডেমি";
-    const url = `https://api.textmebot.com/send.php?recipient=1889343480&text=${encodeURIComponent(message)}&apikey=${TEXTMEBOT_API_KEY}`;
+// Send SMS using SMSMobileAPI
+async function sendSMS(phoneNumber, message) {
+    const formattedPhone = formatPhoneNumber(phoneNumber);
     
-    console.log("📤 Sending test to: 1889343480");
-    console.log("🔗 URL:", url);
+    console.log(`📤 ========================================`);
+    console.log(`📤 Sending SMS via SMSMobileAPI`);
+    console.log(`📤 To: ${formattedPhone}`);
+    console.log(`📤 Message: ${message.substring(0, 100)}...`);
+    console.log(`📤 ========================================`);
     
     try {
-        const response = await axios.get(url);
+        const data = qs.stringify({
+            'api_key': SMS_API_KEY,
+            'to': formattedPhone,
+            'message': message,
+            'sender': 'Mastermind'
+        });
+        
+        const response = await axios.post(SMS_API_URL, data, {
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            timeout: 30000
+        });
+        
         console.log("✅ Response:", response.data);
         
-        res.json({
-            success: response.data === 'OK',
-            response: response.data,
-            message: response.data === 'OK' ? "Test message sent! Check WhatsApp." : "Failed"
-        });
+        if (response.data && (response.data.status === 'success' || response.data.success === true)) {
+            return { success: true, message: "SMS sent successfully", data: response.data };
+        } else {
+            return { success: false, error: response.data?.message || "Failed to send SMS", data: response.data };
+        }
+        
     } catch (error) {
         console.error("❌ Error:", error.message);
-        res.json({ success: false, error: error.message });
+        if (error.response) {
+            console.error("❌ Response:", error.response.data);
+        }
+        return { success: false, error: error.message };
     }
+}
+
+// Test SMS endpoint - sends to your number
+app.get('/test-sms', async (req, res) => {
+    const yourNumber = "8801889343480";
+    const testMessage = `🧪 মাস্টারমাইন্ড অ্যাকাডেমি
+
+এটি একটি টেস্ট এসএমএস।
+
+আপনার SMSMobileAPI সংযোগ সঠিকভাবে কাজ করছে!
+
+📱 নম্বর: +8801889343480
+⏰ সময়: ${new Date().toLocaleString('bn-BD')}
+
+- মাস্টারমাইন্ড অ্যাকাডেমি`;
+    
+    console.log("🧪 Sending test SMS to your number...");
+    
+    const result = await sendSMS(yourNumber, testMessage);
+    
+    res.json({
+        success: result.success,
+        message: result.success ? "Test SMS sent! Check your phone." : "Failed to send test SMS",
+        to: yourNumber,
+        api_response: result.data,
+        error: result.error
+    });
 });
 
-// Send SMS - GET method
-app.get('/send', async (req, res) => {
-    let { phone, message, student, class: className, date } = req.query;
+// GET endpoint for sending SMS
+app.get('/send-sms', async (req, res) => {
+    console.log("📨 GET Request received:", req.query);
+    
+    let { phone, message, studentName, className, date } = req.query;
     
     if (!phone) {
-        return res.json({ success: false, error: "Phone number required" });
+        return res.status(400).json({
+            success: false,
+            error: "Phone number required",
+            example: "/send-sms?phone=8801889343480&message=Hello"
+        });
     }
     
-    // Format phone for TextMeBot (remove 880, keep last 10 digits)
-    let cleanPhone = phone.toString().replace(/[^0-9]/g, '');
-    let recipient = cleanPhone.slice(-10);
+    const formattedPhone = formatPhoneNumber(phone);
     
-    // Create message
-    let text = message;
-    if (!text) {
-        const today = date ? new Date(date).toLocaleDateString('bn-BD') : 'আজ';
-        text = `📢 মাস্টারমাইন্ড অ্যাকাডেমি
+    let smsMessage = message;
+    if (!smsMessage) {
+        const banglaDate = date ? new Date(date).toLocaleDateString('bn-BD') : 'আজ';
+        smsMessage = `মাস্টারমাইন্ড অ্যাকাডেমি
 
 প্রিয় অভিভাবক,
-${student || 'শিক্ষার্থী'} ${today} তারিখে ${className || ''} ক্লাসে উপস্থিত ছিলেন না।
+${studentName || 'শিক্ষার্থী'} ${banglaDate} তারিখে ${className || ''} ক্লাসে উপস্থিত ছিলেন না।
 
 দয়া করে সন্তানের উপস্থিতি নিশ্চিত করুন।
 
 ধন্যবাদ`;
     }
     
-    const url = `https://api.textmebot.com/send.php?recipient=${recipient}&text=${encodeURIComponent(text)}&apikey=${TEXTMEBOT_API_KEY}`;
-    
-    console.log(`📤 Sending to: ${recipient} (original: ${phone})`);
-    
-    try {
-        const response = await axios.get(url);
-        console.log("✅ Response:", response.data);
-        
-        res.json({
-            success: response.data === 'OK',
-            response: response.data,
-            to: recipient,
-            original_phone: phone
-        });
-    } catch (error) {
-        console.error("❌ Error:", error.message);
-        res.json({ success: false, error: error.message });
-    }
+    const result = await sendSMS(formattedPhone, smsMessage);
+    res.json(result);
 });
 
-// Send SMS - POST method
-app.post('/send', async (req, res) => {
-    let { phone, message, studentName, className, date } = req.body;
+// POST endpoint for sending SMS
+app.post('/send-sms', async (req, res) => {
+    console.log("📨 POST Request received:", req.body);
+    
+    const { phone, message, studentName, className, date } = req.body;
     
     if (!phone) {
-        return res.status(400).json({ success: false, error: "Phone required" });
+        return res.status(400).json({
+            success: false,
+            error: "Phone number required"
+        });
     }
     
-    // Format phone for TextMeBot
-    let cleanPhone = phone.toString().replace(/[^0-9]/g, '');
-    let recipient = cleanPhone.slice(-10);
+    const formattedPhone = formatPhoneNumber(phone);
     
-    // Create message
-    let text = message;
-    if (!text) {
-        const today = date ? new Date(date).toLocaleDateString('bn-BD') : 'আজ';
-        text = `📢 মাস্টারমাইন্ড অ্যাকাডেমি
+    let smsMessage = message;
+    if (!smsMessage) {
+        const banglaDate = date ? new Date(date).toLocaleDateString('bn-BD') : 'আজ';
+        smsMessage = `মাস্টারমাইন্ড অ্যাকাডেমি
 
 প্রিয় অভিভাবক,
-${studentName || 'শিক্ষার্থী'} ${today} তারিখে ${className || ''} ক্লাসে উপস্থিত ছিলেন না।
+${studentName || 'শিক্ষার্থী'} ${banglaDate} তারিখে ${className || ''} ক্লাসে উপস্থিত ছিলেন না।
 
 দয়া করে সন্তানের উপস্থিতি নিশ্চিত করুন।
 
 ধন্যবাদ`;
     }
     
-    const url = `https://api.textmebot.com/send.php?recipient=${recipient}&text=${encodeURIComponent(text)}&apikey=${TEXTMEBOT_API_KEY}`;
+    const result = await sendSMS(formattedPhone, smsMessage);
+    res.json(result);
+});
+
+// Bulk SMS endpoint
+app.post('/bulk-sms', async (req, res) => {
+    const { recipients } = req.body;
     
-    console.log(`📤 POST Sending to: ${recipient}`);
-    
-    try {
-        const response = await axios.get(url);
-        console.log("✅ Response:", response.data);
-        
-        res.json({
-            success: response.data === 'OK',
-            response: response.data,
-            to: recipient
+    if (!recipients || !Array.isArray(recipients) || recipients.length === 0) {
+        return res.status(400).json({
+            success: false,
+            error: "Recipients array required"
         });
-    } catch (error) {
-        console.error("❌ Error:", error.message);
-        res.json({ success: false, error: error.message });
     }
+    
+    console.log(`📨 Sending bulk SMS to ${recipients.length} recipients`);
+    
+    const results = [];
+    for (let i = 0; i < recipients.length; i++) {
+        const { phone, studentName, className, date } = recipients[i];
+        const formattedPhone = formatPhoneNumber(phone);
+        const banglaDate = date ? new Date(date).toLocaleDateString('bn-BD') : 'আজ';
+        const message = `মাস্টারমাইন্ড অ্যাকাডেমি
+
+প্রিয় অভিভাবক,
+${studentName || 'শিক্ষার্থী'} ${banglaDate} তারিখে ${className || ''} ক্লাসে উপস্থিত ছিলেন না।
+
+দয়া করে সন্তানের উপস্থিতি নিশ্চিত করুন।
+
+ধন্যবাদ`;
+        
+        const result = await sendSMS(formattedPhone, message);
+        results.push({
+            phone: formattedPhone,
+            studentName,
+            success: result.success,
+            error: result.error
+        });
+        
+        // Delay between messages (1 second)
+        await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    
+    const successCount = results.filter(r => r.success).length;
+    res.json({
+        success: successCount > 0,
+        total: recipients.length,
+        sent: successCount,
+        failed: recipients.length - successCount,
+        details: results
+    });
 });
 
 // Debug phone formatting
-app.get('/debug', (req, res) => {
+app.get('/debug-phone', (req, res) => {
     const { phone } = req.query;
+    
     if (!phone) {
         return res.json({
-            example: "/debug?phone=8801889343480",
-            your_phone: { original: YOUR_PHONE, textmebot: YOUR_PHONE.slice(-10) }
+            error: "Provide phone number",
+            example: "/debug-phone?phone=+8801889343480",
+            formats: {
+                with_plus: formatPhoneNumber("+8801889343480"),
+                with_880: formatPhoneNumber("8801889343480"),
+                with_01: formatPhoneNumber("01889343480"),
+                with_1: formatPhoneNumber("1889343480")
+            }
         });
     }
-    let clean = phone.toString().replace(/[^0-9]/g, '');
+    
     res.json({
         original: phone,
-        clean: clean,
-        textmebot_format: clean.slice(-10)
+        cleaned: phone.toString().replace(/[^0-9]/g, ''),
+        formatted: formatPhoneNumber(phone),
+        isValid: formatPhoneNumber(phone)?.length === 13
+    });
+});
+
+// 404 handler
+app.use((req, res) => {
+    res.status(404).json({
+        success: false,
+        error: "Endpoint not found",
+        available: ["/", "/health", "/test-sms", "/send-sms", "/bulk-sms", "/debug-phone"]
     });
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`\n🚀 ========================================`);
-    console.log(`✅ Mastermind SMS Server Running!`);
+    console.log(`✅ SMSMobileAPI Server Running!`);
     console.log(`🚀 ========================================`);
     console.log(`📡 Port: ${PORT}`);
-    console.log(`📱 Your Phone: ${YOUR_PHONE}`);
-    console.log(`📱 TextMeBot Format: ${YOUR_PHONE.slice(-10)}`);
-    console.log(`🔑 API Key: ${TEXTMEBOT_API_KEY}`);
-    console.log(`\n📋 Test Commands:`);
-    console.log(`   GET /test - Send test to YOUR WhatsApp`);
-    console.log(`   GET /send?phone=8801889343480&message=Hello`);
-    console.log(`   GET /debug?phone=8801889343480`);
+    console.log(`🔑 API Key: ${SMS_API_KEY.substring(0, 20)}...`);
+    console.log(`📱 Your Phone: +8801889343480`);
+    console.log(`\n📋 Available Endpoints:`);
+    console.log(`   GET  /                - API Info`);
+    console.log(`   GET  /health          - Health Check`);
+    console.log(`   GET  /test-sms        - Send test SMS to YOUR phone`);
+    console.log(`   GET  /send-sms        - Send SMS (GET method)`);
+    console.log(`   POST /send-sms        - Send SMS (POST method)`);
+    console.log(`   POST /bulk-sms        - Send bulk SMS`);
+    console.log(`   GET  /debug-phone     - Check phone format`);
+    console.log(`\n💡 Test Commands:`);
+    console.log(`   curl https://selfsms.onrender.com/test-sms`);
+    console.log(`   curl "https://selfsms.onrender.com/send-sms?phone=8801889343480&message=Hello"`);
     console.log(`========================================\n`);
 });
