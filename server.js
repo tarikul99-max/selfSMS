@@ -19,19 +19,19 @@ function formatPhoneNumber(phoneNumber) {
     console.log(`📞 Original: ${phoneNumber} → Clean: ${cleanNumber}`);
     
     // Format for SMSMobileAPI (needs 8801XXXXXXXXX format)
-    if (cleanNumber.length === 13 && cleanNumber.startsWith('8801')) {
+    if (cleanNumber.length === 14 && cleanNumber.startsWith('+8801')) {
         return cleanNumber;
     } else if (cleanNumber.length === 11 && cleanNumber.startsWith('01')) {
-        return '880' + cleanNumber.substring(1);
+        return '+880' + cleanNumber.substring(1);
     } else if (cleanNumber.length === 10 && cleanNumber.startsWith('1')) {
-        return '880' + cleanNumber;
+        return '+880' + cleanNumber;
     } else if (cleanNumber.length === 10) {
-        return '8801' + cleanNumber;
+        return '+8801' + cleanNumber;
     } else if (cleanNumber.length === 9) {
-        return '8801' + cleanNumber;
+        return '+8801' + cleanNumber;
     } else {
         let last10 = cleanNumber.slice(-10);
-        return '8801' + last10;
+        return '+8801' + last10;
     }
 }
 
@@ -46,7 +46,7 @@ app.get('/', (req, res) => {
         endpoints: {
             health: "GET /health",
             send_sms: "POST /send-sms",
-            send_sms_get: "GET /send-sms?phone=8801889343480&message=Hello",
+            send_sms_get: "GET /send-sms?phone=+8801889343480&message=Hello",
             test: "GET /test-sms"
         }
     });
@@ -106,7 +106,7 @@ async function sendSMS(phoneNumber, message) {
 
 // Test SMS endpoint - sends to your number
 app.get('/test-sms', async (req, res) => {
-    const yourNumber = "8801889343480";
+    const yourNumber = "+8801889343480";
     const testMessage = `🧪 মাস্টারমাইন্ড অ্যাকাডেমি
 
 এটি একটি টেস্ট এসএমএস।
@@ -141,7 +141,7 @@ app.get('/send-sms', async (req, res) => {
         return res.status(400).json({
             success: false,
             error: "Phone number required",
-            example: "/send-sms?phone=8801889343480&message=Hello"
+            example: "/send-sms?phone=+8801889343480&message=Hello"
         });
     }
     
