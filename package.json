@@ -1,8 +1,6 @@
 {
   "name": "selfsms",
   "version": "1.0.0",
-  "description": "SMS API Service for Mastermind Academy",
-  "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
@@ -11,8 +9,5 @@
     "cors": "^2.8.5",
     "axios": "^1.6.0",
     "qs": "^6.11.2"
-  },
-  "engines": {
-    "node": "18.x"
   }
 }
