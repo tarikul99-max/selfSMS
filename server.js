@@ -6,22 +6,24 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// TextMeBot API Configuration
+// TextMeBot API Configuration (আপনার API key)
 const TEXTMEBOT_API_KEY = "M1mcbWVX9K9A";
-const YOUR_PHONE = "8801889343480"; // আপনার ফোন নম্বর (যেটা কানেক্ট করেছেন)
 
 // Helper function to format phone number
 function formatPhoneNumber(phoneNumber) {
     if (!phoneNumber) return null;
     let cleanNumber = phoneNumber.toString().replace(/[^0-9]/g, '');
     
-    if (cleanNumber.startsWith('8801') && cleanNumber.length === 13) {
+    // Must return 13 digits starting with 8801
+    if (cleanNumber.length === 13 && cleanNumber.startsWith('8801')) {
         return cleanNumber;
-    } else if (cleanNumber.startsWith('01') && cleanNumber.length === 11) {
+    } else if (cleanNumber.length === 11 && cleanNumber.startsWith('01')) {
         return '880' + cleanNumber.substring(1);
-    } else if (cleanNumber.startsWith('1') && cleanNumber.length === 10) {
+    } else if (cleanNumber.length === 10 && cleanNumber.startsWith('1')) {
         return '880' + cleanNumber;
     } else if (cleanNumber.length === 10) {
+        return '8801' + cleanNumber;
+    } else if (cleanNumber.length === 9) {
         return '8801' + cleanNumber;
     } else {
         let last10 = cleanNumber.slice(-10);
@@ -29,11 +31,11 @@ function formatPhoneNumber(phoneNumber) {
     }
 }
 
-// Remove country code for WhatsApp (TextMeBot expects number without 880)
-function formatForWhatsApp(phoneNumber) {
+// Remove 880 for WhatsApp (TextMeBot expects number without country code)
+function formatForTextMeBot(phoneNumber) {
     let formatted = formatPhoneNumber(phoneNumber);
     if (formatted && formatted.startsWith('880')) {
-        return formatted.substring(3); // Remove 880
+        return formatted.substring(3); // Remove 880 -> 1889343480
     }
     return formatted;
 }
@@ -42,8 +44,9 @@ function formatForWhatsApp(phoneNumber) {
 app.get('/health', (req, res) => {
     res.json({ 
         status: "active", 
-        service: "WhatsApp SMS API",
-        api_type: "TextMeBot",
+        service: "TextMeBot WhatsApp API",
+        api_key_configured: true,
+        your_phone: "+8801889343480",
         timestamp: new Date().toISOString()
     });
 });
@@ -54,19 +57,20 @@ app.get('/', (req, res) => {
         status: "active",
         service: "Mastermind Academy SMS Service",
         api: "TextMeBot WhatsApp API",
+        api_key: TEXTMEBOT_API_KEY ? "Configured ✓" : "Missing ✗",
+        phone_format: "+8801XXXXXXXXX (example: +8801889343480)",
         endpoints: {
             health: "GET /health",
             send_sms: "POST /send-sms",
-            send_whatsapp: "POST /send-whatsapp",
+            send_sms_get: "GET /send-sms?phone=8801889343480&message=Hello",
             test: "GET /test-sms"
-        },
-        phone_format: "+8801XXXXXXXXX"
+        }
     });
 });
 
 // Send WhatsApp message using TextMeBot API
 async function sendWhatsAppMessage(phoneNumber, message) {
-    const whatsappNumber = formatForWhatsApp(phoneNumber);
+    const whatsappNumber = formatForTextMeBot(phoneNumber);
     
     console.log(`📤 Sending WhatsApp to: ${whatsappNumber}`);
     console.log(`📝 Message: ${message.substring(0, 100)}...`);
@@ -79,21 +83,27 @@ async function sendWhatsAppMessage(phoneNumber, message) {
                 recipient: whatsappNumber,
                 text: message,
                 apikey: TEXTMEBOT_API_KEY
-            }
+            },
+            timeout: 30000
         });
         
-        console.log("TextMeBot Response:", response.data);
-        return response.data;
+        console.log("✅ TextMeBot Response:", response.data);
+        
+        if (response.data === 'OK' || response.data?.includes('OK') || response.data?.includes('success')) {
+            return { success: true, message: "WhatsApp message sent successfully" };
+        } else {
+            return { success: false, error: response.data || "Failed to send message" };
+        }
         
     } catch (error) {
-        console.error("TextMeBot Error:", error.message);
-        throw error;
+        console.error("❌ TextMeBot Error:", error.message);
+        return { success: false, error: error.message };
     }
 }
 
 // POST endpoint for sending SMS/WhatsApp
 app.post('/send-sms', async (req, res) => {
-    console.log("📨 Request received:", req.body);
+    console.log("📨 POST Request received:", req.body);
     
     const { phone, message, studentName, className, date } = req.body;
     
@@ -105,55 +115,45 @@ app.post('/send-sms', async (req, res) => {
     }
     
     const formattedPhone = formatPhoneNumber(phone);
-    console.log(`📞 Formatted phone: ${formattedPhone}`);
+    console.log(`📞 Original: ${phone} → Formatted: ${formattedPhone}`);
     
-    // Create Bengali message
-    let smsMessage = message;
-    if (!smsMessage) {
-        const banglaDate = date ? new Date(date).toLocaleDateString('bn-BD', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-        }) : 'আজ';
-        
-        smsMessage = `📢 *মাস্টারমাইন্ড অ্যাকাডেমি*\n\nপ্রিয় অভিভাবক,\n*${studentName || 'শিক্ষার্থী'}* ${banglaDate} তারিখে *${className || ''}* ক্লাসে উপস্থিত ছিলেন না।\n\nদয়া করে সন্তানের উপস্থিতি নিশ্চিত করুন।\n\nধন্যবাদ\nমাস্টারমাইন্ড অ্যাকাডেমি`;
-    }
-    
-    try {
-        const result = await sendWhatsAppMessage(formattedPhone, smsMessage);
-        
-        if (result && (result.includes('OK') || result.includes('success') || result === 'OK')) {
-            res.json({ 
-                success: true, 
-                message: "WhatsApp message sent successfully",
-                to: formattedPhone,
-                response: result
-            });
-        } else {
-            res.json({ 
-                success: false, 
-                error: result || "Failed to send message",
-                to: formattedPhone
-            });
-        }
-        
-    } catch (error) {
-        console.error("Error:", error.message);
-        res.status(500).json({ 
-            success: false, 
-            error: error.message 
+    if (!formattedPhone || formattedPhone.length !== 13) {
+        return res.status(400).json({
+            success: false,
+            error: `Invalid phone number: ${phone}`,
+            supported_format: "+8801XXXXXXXXX (example: +8801889343480)"
         });
     }
+    
+    let smsMessage = message;
+    if (!smsMessage) {
+        const banglaDate = date ? new Date(date).toLocaleDateString('bn-BD') : 'আজ';
+        smsMessage = `📢 *মাস্টারমাইন্ড অ্যাকাডেমি*
+
+প্রিয় অভিভাবক,
+
+*${studentName || 'শিক্ষার্থী'}* ${banglaDate} তারিখে *${className || ''}* ক্লাসে উপস্থিত ছিলেন না।
+
+দয়া করে সন্তানের উপস্থিতি নিশ্চিত করুন।
+
+ধন্যবাদ
+মাস্টারমাইন্ড অ্যাকাডেমি`;
+    }
+    
+    const result = await sendWhatsAppMessage(formattedPhone, smsMessage);
+    res.json(result);
 });
 
-// GET endpoint for testing (easy to test from browser)
+// GET endpoint for testing
 app.get('/send-sms', async (req, res) => {
+    console.log("📨 GET Request received:", req.query);
+    
     const { phone, message, studentName, className, date } = req.query;
     
     if (!phone) {
         return res.status(400).json({ 
             success: false, 
-            error: "Phone number is required",
+            error: "Phone number required",
             example: "/send-sms?phone=8801889343480&message=Hello"
         });
     }
@@ -163,110 +163,34 @@ app.get('/send-sms', async (req, res) => {
     let smsMessage = message;
     if (!smsMessage) {
         const banglaDate = date ? new Date(date).toLocaleDateString('bn-BD') : 'আজ';
-        smsMessage = `📢 মাস্টারমাইন্ড অ্যাকাডেমি\n\nপ্রিয় অভিভাবক,\n${studentName || 'শিক্ষার্থী'} ${banglaDate} তারিখে ${className || ''} ক্লাসে উপস্থিত ছিলেন না।\n\nদয়া করে সন্তানের উপস্থিতি নিশ্চিত করুন।\n\nধন্যবাদ - মাস্টারমাইন্ড`;
+        smsMessage = `মাস্টারমাইন্ড অ্যাকাডেমি: ${studentName || 'শিক্ষার্থী'} ${banglaDate} ${className || ''} এ অনুপস্থিত`;
     }
     
-    try {
-        const result = await sendWhatsAppMessage(formattedPhone, smsMessage);
-        
-        if (result && result.includes('OK')) {
-            res.json({ 
-                success: true, 
-                message: "WhatsApp message sent",
-                to: formattedPhone
-            });
-        } else {
-            res.json({ 
-                success: false, 
-                error: result,
-                to: formattedPhone
-            });
-        }
-        
-    } catch (error) {
-        res.status(500).json({ 
-            success: false, 
-            error: error.message 
-        });
-    }
+    const result = await sendWhatsAppMessage(formattedPhone, smsMessage);
+    res.json(result);
 });
 
-// Simple test endpoint
+// Test endpoint - sends test message to YOUR number (+8801889343480)
 app.get('/test-sms', async (req, res) => {
     const testPhone = "8801889343480";
-    const testMessage = "🧪 *পরীক্ষামূলক মেসেজ*\n\nআপনার WhatsApp সংযোগ সঠিকভাবে কাজ করছে!\n\n- মাস্টারমাইন্ড অ্যাকাডেমি";
-    
-    console.log("🧪 Sending test message...");
-    
-    try {
-        const result = await sendWhatsAppMessage(testPhone, testMessage);
-        
-        res.json({ 
-            success: true, 
-            message: "Test message sent to your WhatsApp",
-            to: testPhone,
-            response: result
-        });
-    } catch (error) {
-        res.json({ 
-            success: false, 
-            error: error.message 
-        });
-    }
-});
+    const testMessage = `🧪 *পরীক্ষামূলক মেসেজ*
 
-// Send to multiple recipients (bulk)
-app.post('/bulk-sms', async (req, res) => {
-    const { recipients } = req.body; // [{ phone, studentName, className, date }]
+আপনার WhatsApp সংযোগ সঠিকভাবে কাজ করছে!
+
+📱 আপনার নম্বর: +8801889343480
+🔑 API Key: ${TEXTMEBOT_API_KEY}
+
+- মাস্টারমাইন্ড অ্যাকাডেমি`;
     
-    if (!recipients || !Array.isArray(recipients) || recipients.length === 0) {
-        return res.status(400).json({ 
-            success: false, 
-            error: "Recipients array is required" 
-        });
-    }
+    console.log("🧪 Sending test message to your number...");
     
-    console.log(`📨 Sending bulk messages to ${recipients.length} recipients`);
+    const result = await sendWhatsAppMessage(testPhone, testMessage);
     
-    const results = [];
-    for (let i = 0; i < recipients.length; i++) {
-        const recipient = recipients[i];
-        const { phone, studentName, className, date } = recipient;
-        
-        const formattedPhone = formatPhoneNumber(phone);
-        const banglaDate = date ? new Date(date).toLocaleDateString('bn-BD') : 'আজ';
-        const message = `📢 মাস্টারমাইন্ড অ্যাকাডেমি\n\nপ্রিয় অভিভাবক,\n${studentName || 'শিক্ষার্থী'} ${banglaDate} তারিখে ${className || ''} ক্লাসে উপস্থিত ছিলেন না।\n\nদয়া করে সন্তানের উপস্থিতি নিশ্চিত করুন।\n\nধন্যবাদ - মাস্টারমাইন্ড`;
-        
-        try {
-            const result = await sendWhatsAppMessage(formattedPhone, message);
-            results.push({
-                phone: formattedPhone,
-                studentName,
-                success: result && result.includes('OK'),
-                response: result
-            });
-        } catch (error) {
-            results.push({
-                phone: formattedPhone,
-                studentName,
-                success: false,
-                error: error.message
-            });
-        }
-        
-        // Delay between messages (5 seconds as recommended)
-        await new Promise(resolve => setTimeout(resolve, 5000));
-    }
-    
-    const successCount = results.filter(r => r.success).length;
-    const failCount = results.length - successCount;
-    
-    res.json({
-        success: successCount > 0,
-        total: recipients.length,
-        sent: successCount,
-        failed: failCount,
-        details: results
+    res.json({ 
+        success: result.success,
+        message: result.success ? "Test message sent to your WhatsApp! Check your phone." : "Failed to send test message",
+        to: testPhone,
+        response: result
     });
 });
 
@@ -275,28 +199,26 @@ app.use((req, res) => {
     res.status(404).json({
         success: false,
         error: "Endpoint not found",
-        available_endpoints: ["/", "/health", "/send-sms", "/test-sms", "/bulk-sms"]
+        available_endpoints: ["/", "/health", "/send-sms", "/test-sms"]
     });
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`\n🚀 ========================================`);
-    console.log(`✅ WhatsApp SMS Server is running!`);
+    console.log(`✅ TextMeBot WhatsApp Server Running!`);
     console.log(`🚀 ========================================`);
     console.log(`📡 Port: ${PORT}`);
     console.log(`🔑 API Key: ${TEXTMEBOT_API_KEY}`);
-    console.log(`📱 Your Phone: ${YOUR_PHONE}`);
-    console.log(`📱 Phone format: +8801XXXXXXXXX`);
+    console.log(`📱 Your Phone: +8801889343480`);
     console.log(`\n📋 Available Endpoints:`);
     console.log(`   GET  /                - API Info`);
     console.log(`   GET  /health          - Health Check`);
-    console.log(`   GET  /test-sms        - Send test message to YOUR phone`);
+    console.log(`   GET  /test-sms        - Send test message to YOUR WhatsApp`);
     console.log(`   GET  /send-sms        - Send message (GET method)`);
     console.log(`   POST /send-sms        - Send message (POST method)`);
-    console.log(`   POST /bulk-sms        - Send bulk messages`);
     console.log(`\n💡 Test Commands:`);
-    console.log(`   curl ${process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`}/test-sms`);
-    console.log(`   curl "${process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`}/send-sms?phone=8801889343480&message=Hello"`);
+    console.log(`   curl https://selfsms.onrender.com/test-sms`);
+    console.log(`   curl "https://selfsms.onrender.com/send-sms?phone=8801889343480&message=Hello"`);
     console.log(`========================================\n`);
 });
