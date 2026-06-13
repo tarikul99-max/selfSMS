@@ -7,7 +7,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ✅ আপনার নতুন API Key বসান
+// SMSMobileAPI Configuration - আপনার API key
 const SMS_API_KEY = "b7f7c6a77b2d1f617db0446955729a4d88650c47eea8f173";
 const SMS_API_URL = "https://api.smsmobileapi.com/send";
 
@@ -25,95 +25,83 @@ function formatPhoneNumber(phoneNumber) {
     return '8801' + last10;
 }
 
-// Root endpoint
+// Health check
+app.get('/health', (req, res) => {
+    res.json({ status: "active", service: "SMSMobileAPI", timestamp: new Date().toISOString() });
+});
+
+// Root info
 app.get('/', (req, res) => {
     res.json({
         status: "active",
-        service: "SMSMobileAPI",
-        api_key_configured: true,
-        message: "Server is running!",
+        service: "Mastermind SMS Service",
         endpoints: {
-            health: "GET /health",
             test: "GET /test-sms",
             send: "POST /send-sms",
-            send_get: "GET /send-sms?phone=8801889343480&message=Hello"
+            debug: "GET /debug?phone=8801889343480"
         }
     });
 });
-
-// Health check
-app.get('/health', (req, res) => {
-    res.json({
-        status: "active",
-        service: "SMSMobileAPI",
-        timestamp: new Date().toISOString()
-    });
-});
-
-// Send SMS function
-async function sendSMS(phoneNumber, message) {
-    const formattedPhone = formatPhoneNumber(phoneNumber);
-    
-    console.log(`📤 Sending SMS to: ${formattedPhone}`);
-    console.log(`📝 Message: ${message.substring(0, 100)}...`);
-    
-    try {
-        const data = qs.stringify({
-            'api_key': SMS_API_KEY,
-            'to': formattedPhone,
-            'message': message,
-            'sender': 'Mastermind'
-        });
-        
-        const response = await axios.post(SMS_API_URL, data, {
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded'
-            },
-            timeout: 30000
-        });
-        
-        console.log("✅ Response:", response.data);
-        
-        if (response.data && (response.data.status === 'success' || response.data.success === true)) {
-            return { success: true, message: "SMS sent", data: response.data };
-        } else {
-            return { success: false, error: response.data?.message || "Failed", data: response.data };
-        }
-        
-    } catch (error) {
-        console.error("❌ Error:", error.message);
-        return { success: false, error: error.message };
-    }
-}
 
 // Test SMS - আপনার ফোনে টেস্ট মেসেজ যাবে
 app.get('/test-sms', async (req, res) => {
-    const testMessage = `🧪 মাস্টারমাইন্ড অ্যাকাডেমি
+    const targetNumber = "8801889343480";
+    const testMessage = `🧪 মাস্টারমাইন্ড অ্যাকাডেমি থেকে টেস্ট এসএমএস!
 
-এটি একটি টেস্ট এসএমএস।
+আপনার API সংযোগ সঠিকভাবে কাজ করছে।
 
-আপনার SMSMobileAPI সংযোগ সঠিকভাবে কাজ করছে!
+সময়: ${new Date().toLocaleString('bn-BD')}`;
 
-📱 নম্বর: +8801889343480
-⏰ সময়: ${new Date().toLocaleString('bn-BD')}
+    try {
+        const formattedPhone = formatPhoneNumber(targetNumber);
+        const data = qs.stringify({
+            'api_key': SMS_API_KEY,
+            'to': formattedPhone,
+            'message': testMessage,
+            'sender': 'Mastermind'
+        });
 
-- মাস্টারমাইন্ড অ্যাকাডেমি`;
-    
-    const result = await sendSMS("8801889343480", testMessage);
-    res.json(result);
+        const response = await axios.post(SMS_API_URL, data, {
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+        });
+
+        res.json({ success: true, message: "টেস্ট এসএমএস সফল!", response: response.data });
+    } catch (error) {
+        res.json({ success: false, error: error.message });
+    }
 });
 
-// POST endpoint for sending SMS
+// Debug phone
+app.get('/debug', (req, res) => {
+    const { phone } = req.query;
+    if (!phone) {
+        return res.json({
+            example: "/debug?phone=+8801889343480",
+            result: formatPhoneNumber("+8801889343480")
+        });
+    }
+    res.json({
+        original: phone,
+        formatted: formatPhoneNumber(phone),
+        valid: formatPhoneNumber(phone)?.length === 13
+    });
+});
+
+// Main SMS send endpoint - POST (ফ্রন্টএন্ড থেকে কল হবে)
 app.post('/send-sms', async (req, res) => {
-    console.log("📨 POST Request:", req.body);
+    console.log("📨 SMS request:", req.body);
     
     const { phone, message, studentName, className, date } = req.body;
     
     if (!phone) {
-        return res.status(400).json({ success: false, error: "Phone number required" });
+        return res.status(400).json({ success: false, error: "Phone required" });
     }
     
     const formattedPhone = formatPhoneNumber(phone);
+    
+    if (!formattedPhone || formattedPhone.length !== 13) {
+        return res.status(400).json({ success: false, error: "Invalid phone number" });
+    }
     
     let smsMessage = message;
     if (!smsMessage) {
@@ -128,51 +116,56 @@ ${studentName || 'শিক্ষার্থী'} ${banglaDate} তারিখ
 ধন্যবাদ`;
     }
     
-    const result = await sendSMS(formattedPhone, smsMessage);
-    res.json(result);
+    try {
+        const data = qs.stringify({
+            'api_key': SMS_API_KEY,
+            'to': formattedPhone,
+            'message': smsMessage,
+            'sender': 'Mastermind'
+        });
+        
+        const response = await axios.post(SMS_API_URL, data, {
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+        });
+        
+        console.log("✅ SMS sent to:", formattedPhone);
+        res.json({ success: true, message: "SMS sent", to: formattedPhone });
+        
+    } catch (error) {
+        console.error("❌ SMS failed:", error.message);
+        res.json({ success: false, error: error.message });
+    }
 });
 
-// GET endpoint for testing
+// GET method for testing
 app.get('/send-sms', async (req, res) => {
     const { phone, message } = req.query;
-    
     if (!phone) {
-        return res.status(400).json({ success: false, error: "Phone required" });
+        return res.json({ success: false, error: "Phone required" });
     }
     
-    const result = await sendSMS(phone, message || "Test SMS from Mastermind Academy");
-    res.json(result);
-});
-
-// Debug phone number
-app.get('/debug', (req, res) => {
-    const { phone } = req.query;
-    if (!phone) {
-        return res.json({
-            example: "/debug?phone=8801889343480",
-            formats: {
-                with_plus: formatPhoneNumber("+8801889343480"),
-                with_880: formatPhoneNumber("8801889343480"),
-                with_01: formatPhoneNumber("01889343480")
-            }
+    const formattedPhone = formatPhoneNumber(phone);
+    
+    try {
+        const data = qs.stringify({
+            'api_key': SMS_API_KEY,
+            'to': formattedPhone,
+            'message': message || "Test SMS",
+            'sender': 'Mastermind'
         });
+        
+        const response = await axios.post(SMS_API_URL, data, {
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+        });
+        
+        res.json({ success: true, response: response.data });
+    } catch (error) {
+        res.json({ success: false, error: error.message });
     }
-    res.json({
-        original: phone,
-        formatted: formatPhoneNumber(phone)
-    });
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`\n🚀 ========================================`);
-    console.log(`✅ SMSMobileAPI Server Running!`);
-    console.log(`🚀 ========================================`);
-    console.log(`📡 Port: ${PORT}`);
-    console.log(`🔑 API Key: ${SMS_API_KEY.substring(0, 20)}...`);
-    console.log(`\n📋 Test Commands:`);
-    console.log(`   GET /health`);
-    console.log(`   GET /test-sms`);
-    console.log(`   GET /send-sms?phone=8801889343480&message=Hello`);
-    console.log(`========================================\n`);
+    console.log(`\n✅ SMS Server Running on port ${PORT}`);
+    console.log(`📱 Test: https://selfsms.onrender.com/test-sms`);
 });
